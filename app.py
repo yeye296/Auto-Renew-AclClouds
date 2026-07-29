@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
+import os,sys
 import re
 import time
 import requests
@@ -582,7 +582,7 @@ def handle_captcha_challenge(sb, label='验证码', timeout=20):
                 break
 
     attempts = 0
-    max_attempts = 8
+    max_attempts = 20
     while attempts < max_attempts:
         challenge = get_challenge()
         if not challenge:
@@ -878,13 +878,13 @@ def main():
                 send_telegram("⚠️ 未配置 ACL_EMAIL 或 ACL_PASSWORD。")
                 return
             if not login(sb, EMAIL, PASSWORD):
-                return
+                sys.exit(1)
         elif is_logged_in(sb):
             print(f"✅ 当前已登录。URL: {sb.get_current_url()}，标题: {sb.get_title()}")
         else:
             print(f"❌ 未能确认登录状态。URL: {sb.get_current_url()}，标题: {sb.get_title()}")
             send_telegram("⚠️ 未能确认登录状态，请检查账号密码配置。")
-            return
+            sys.exit(1)
 
         # 2. 进入项目页
         sb.open(PROJECTS_URL)
@@ -898,8 +898,9 @@ def main():
             print("❌ 未找到项目卡片。")
             log_projects_page_diagnostics(sb)
             send_telegram("⚠️ 未找到项目卡片，请检查页面结构。")
-            return
+            sys.exit(1)
 
+        hasError = False
         print(f"找到 {len(cards)} 个项目卡片。")
         for idx, card in enumerate(cards, 1):
             try:
@@ -920,6 +921,7 @@ def main():
                         send_telegram(build_success_message(project_name, old_expiry, new_expiry))
                     else:
                         send_telegram(build_unconfirmed_message(project_name, old_expiry, new_expiry, result_note))
+                        hasError = True
                 else:
                     note = get_renew_note(card)
                     print(f"无 Renew 按钮，提示: {note}")
@@ -927,7 +929,9 @@ def main():
             except Exception as e:
                 print(f"处理卡片 {idx} 出错: {e}")
                 send_telegram(f"🇫🇷 Aclclouds 续期通知\n\n⚠️ 处理出错: {str(e)}")
+                hasError = True
 
+        if hasError: sys.exit(1)
         print("所有项目处理完成。")
 
 if __name__ == '__main__':
