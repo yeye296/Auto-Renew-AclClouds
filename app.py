@@ -818,9 +818,11 @@ def login(sb, email, password):
 
     # ---- 等待登录结果 ----
     try:
-        wait_for_url_change(sb, login_page_url, timeout=30)
+        try:
+            wait_for_url_change(sb, login_page_url, timeout=30)
+        except Exception as e:
+            print(f"⚠️ 登录过程异常: {e}")
         if '/auth/login' not in sb.get_current_url():
-            sb.assert_title('Home | ACLClouds')
             print("✅ 登录成功！")
             return True
         else:
