@@ -18,8 +18,9 @@ TG_CHAT_ID = os.getenv('TG_CHAT_ID') or ""
 TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN') or ""
 
 LOGIN_PATH = '/auth/login'
-BASE_URL = 'https://dash.aclclouds.com'
+BASE_URL = 'https://aclclouds.com'
 PROJECTS_URL = f'{BASE_URL}/dashboard/projects'
+LOGIN_URL = f'{BASE_URL}{LOGIN_PATH}'
 
 def beijing_time_str():
     try:
@@ -53,7 +54,7 @@ def is_login_page(sb):
 
 def is_logged_in(sb):
     current_url = sb.get_current_url()
-    return BASE_URL in current_url and LOGIN_PATH not in current_url
+    return 'aclclouds.com' in current_url and LOGIN_PATH not in current_url
 
 def scroll_to_selector(sb, selector):
     sb.scroll_to(selector)
@@ -320,6 +321,10 @@ def get_project_expiry(card):
         './/*[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "expire")]',
         './/*[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "valid")]',
         './/*[contains(normalize-space(.), "过期") or contains(normalize-space(.), "到期")]',
+        # 法语关键词: expiration, expire le, échéance, valable jusqu
+        './/*[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "expir")]',
+        './/*[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "\u00e9ch\u00e9ance")]',
+        './/*[contains(translate(normalize-space(.), "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"), "valable")]',
     ]
     for selector in selectors:
         try:
@@ -337,7 +342,18 @@ def get_project_expiry(card):
             continue
 
     card_text = element_text(card)
-    return extract_date_like(card_text) or extract_duration_like(card_text) or '未知'
+    date_found = extract_date_like(card_text) or extract_duration_like(card_text)
+    if date_found:
+        return date_found
+    # 最后尝试: 用正则从卡片文本中找日期格式的字符串
+    import re as _re
+    m = _re.search(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}(?:[T ]\d{1,2}:\d{2}(?::\d{2})?)?', card_text)
+    if m:
+        return m.group(0).strip()
+    m = _re.search(r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}', card_text)
+    if m:
+        return m.group(0).strip()
+    return '未知'
 
 def get_renewal_available_note(card):
     text = element_text(card)
@@ -844,7 +860,8 @@ def login(sb, email, password):
         except Exception as e:
             print(f"⚠️ 登录过程异常: {e}")
         if '/auth/login' not in sb.get_current_url():
-            print("✅ 登录成功！")
+            title = sb.get_title()
+            print(f'✅ 登录成功！(标题: {title})')
             return True
         else:
             # 提取错误信息
@@ -891,7 +908,7 @@ def main():
         sb.set_window_size(1366, 768)
 
         if not is_login_page(sb):
-            sb.open(BASE_URL)
+            sb.open(LOGIN_URL)
             sb.wait_for_ready_state_complete()
             time.sleep(2)
 
@@ -913,6 +930,17 @@ def main():
         sb.open(PROJECTS_URL)
         sb.wait_for_ready_state_complete()
         time.sleep(3)
+
+        # 如果被踢回登录页, 说明 cookie/session 过期, 重新登录后再进
+        if is_login_page(sb):
+            print('⚠️ 访问项目页被重定向到登录页, cookie 可能已过期, 尝试重新登录...')
+            if not login(sb, EMAIL, PASSWORD):
+                sys.exit(1)
+            sb.open(PROJECTS_URL)
+            sb.wait_for_ready_state_complete()
+            time.sleep(3)
+            print(f'🔄 重新登录后项目页 URL: {sb.get_current_url()}, 标题: {sb.get_title()}')
+
 
         # 3. 定位卡片
         cards = find_project_cards(sb)
