@@ -2,7 +2,7 @@ name: Auto-Renew-ACL
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * 0,3,4' # 每隔3天 12点(UTC 2点) 运行
+    - cron: '50 0 * * *' # 每天 UTC 1：00 触发（北京时间 9：00），由脚本判断是否执行，四天一续
 
 jobs:
   Renew-acl:
@@ -11,15 +11,34 @@ jobs:
     permissions:
       contents: write
       actions: write
+
     steps:
+      - name: 📅 日期检查
+        id: check
+        run: |
+          START="2026-09-29"
+          TODAY=$(date -u +%F)
+          start_sec=$(date -d "$START" +%s)
+          today_sec=$(date -d "$TODAY" +%s)
+          days=$(( (today_sec - start_sec) / 86400 ))
+          echo "Days since $START: $days"
+          if (( days % 4 == 0 )); then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: 📥 下载代码
+        if: steps.check.outputs.should_run == 'true'
         uses: actions/checkout@v6
       - name: 🐍 设置 Python
+        if: steps.check.outputs.should_run == 'true'
         uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           
       - name: 🛠️ 安装系统依赖
+        if: steps.check.outputs.should_run == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -30,11 +49,13 @@ jobs:
             fonts-noto-cjk
             
       - name: 🐍 安装 Python 依赖
+        if: steps.check.outputs.should_run == 'true'
         run: |
           pip install seleniumbase aiohttp requests
           seleniumbase install chromedriver
 
       # - name: 🌐 设置sing-box代理转发
+      #   if: steps.check.outputs.should_run == 'true'
       #   continue-on-error: true
       #   env:
       #     NODE_LINK: ${{ secrets.NODE_LINK }}
@@ -54,7 +75,8 @@ jobs:
 
       # --- 新增的防暂停代码开始 ---
       - name: Commit time.txt to repo
-        if: success()
+        # if: success()
+        if: steps.check.outputs.should_run == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -80,7 +102,8 @@ jobs:
       # --- 新增的防暂停代码结束 ---
           
       # - name: 🧹 清理旧的工作流运行记录
-      #   if: always()
+      #   # if: always()
+      #   if: steps.check.outputs.should_run == 'true'
       #   env:
       #     GH_TOKEN: ${{ github.token }}
       #   run: |
