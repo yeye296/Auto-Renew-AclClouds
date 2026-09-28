@@ -19,8 +19,9 @@ TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN') or ""
 
 LOGIN_PATH = '/auth/login'
 BASE_URL = 'https://aclclouds.com'
-PROJECTS_URL = f'{BASE_URL}/dashboard/projects'
 LOGIN_URL = f'{BASE_URL}{LOGIN_PATH}'
+BASE_URL2 = 'https://dash.aclclouds.com'
+PROJECTS_URL = f'{BASE_URL2}/dashboard/projects'
 
 def beijing_time_str():
     try:
@@ -815,13 +816,14 @@ def login(sb, email, password):
     if not fill_input(sb, '#password', password, '密码'):
         print("⚠️ 密码仍未能正确填入。")
 
+    sb.sleep(15) # 等待验证码加载
     # ---- 验证码 ----
     captcha_ok = click_captcha_checkbox(sb, '登录验证码')
     if not captcha_ok:
         print("⚠️ 登录验证码未完成，暂不点击登录按钮，避免直接提交。")
         return False
 
-    sb.sleep(1)
+    sb.sleep(2)
 
     # ---- 点击登录按钮 ----
     login_page_url = sb.get_current_url()
@@ -907,10 +909,9 @@ def main():
 
         sb.set_window_size(1366, 768)
 
-        if not is_login_page(sb):
-            sb.open(LOGIN_URL)
-            sb.wait_for_ready_state_complete()
-            time.sleep(2)
+        sb.open(LOGIN_URL)
+        sb.wait_for_ready_state_complete()
+        time.sleep(2)
 
         if is_login_page(sb):
             if not EMAIL or not PASSWORD:
@@ -942,19 +943,28 @@ def main():
             print(f'🔄 重新登录后项目页 URL: {sb.get_current_url()}, 标题: {sb.get_title()}')
 
 
-        # 3. 定位卡片
-        cards = find_project_cards(sb)
+        # ========================================================
+        # 3. 定位卡片 (动态索引模式，防止元素刷新失效)
+        # ========================================================
+        initial_cards = find_project_cards(sb)
+        total_cards = len(initial_cards)
 
-        if not cards:
+        if total_cards == 0:
             print("❌ 未找到项目卡片。")
             log_projects_page_diagnostics(sb)
             send_telegram("⚠️ 未找到项目卡片，请检查页面结构。")
             sys.exit(1)
 
-        hasError = False
-        print(f"找到 {len(cards)} 个项目卡片。")
-        for idx, card in enumerate(cards, 1):
+        print(f"找到 {total_cards} 个项目卡片。")
+        for idx in range(1, total_cards + 1):
             try:
+                # 每次循环重新根据当前 DOM 树提取该索引对应的卡片
+                card = get_card_by_index(sb, idx)
+                if not card:
+                    print(f"⚠️ 未能重新定位到第 {idx} 个项目卡片，可能页面结构已发生变化。跳过。")
+                    hasError = True
+                    continue
+
                 project_name = get_project_name(card, idx)
                 old_expiry = get_project_expiry(card)
                 print(f"[{project_name}] 当前过期: {old_expiry}")
