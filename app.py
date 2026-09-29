@@ -955,6 +955,7 @@ def main():
             send_telegram("⚠️ 未找到项目卡片，请检查页面结构。")
             sys.exit(1)
 
+        hasError = False
         print(f"找到 {total_cards} 个项目卡片。")
         for idx in range(1, total_cards + 1):
             try:
