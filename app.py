@@ -12,10 +12,10 @@ from selenium.webdriver.common.by import By
 from zoneinfo import ZoneInfo
 
 # ----- 配置（从环境变量读取或在双引号内填写） -----
-EMAIL = os.getenv('EMAIL') or ""
-PASSWORD = os.getenv('PASSWORD') or ""
-TG_CHAT_ID = os.getenv('TG_CHAT_ID') or ""
-TG_BOT_TOKEN = os.getenv('TG_BOT_TOKEN') or ""
+EMAIL = os.getenv('EMAIL') or ""         # 邮箱必填
+PASSWORD = os.getenv('PASSWORD') or ""   # 密码必填
+TG_CHAT_ID = os.environ.get("TG_CHAT_ID") or ""  # CHAT_ID 可选
+TG_BOT_TOKEN = os.environ.get("TG_BOT_TOKEN") or "" # BOT_TOKEN 可选，需同时填写CHAT_ID生效
 
 LOGIN_PATH = '/auth/login'
 BASE_URL = 'https://aclclouds.com'
@@ -1121,6 +1121,7 @@ def main():
         time.sleep(2)
 
         if is_login_page(sb):
+            print("执行正常登录...")
             if not EMAIL or not PASSWORD:
                 print("❌ 未配置 ACL_EMAIL 或 ACL_PASSWORD，无法执行账号密码登录。")
                 send_telegram("⚠️ 未配置 ACL_EMAIL 或 ACL_PASSWORD。")
